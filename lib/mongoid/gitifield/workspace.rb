@@ -92,9 +92,9 @@ module Mongoid
       end
 
       def before_apply(lc_file_name, patch_path)
-        file_name = File.basename(patch_path)
-        @tmp_patch_path = @path.join("#{TMP_PATCH_PATH}/#{file_name}")
-        %x(cp #{patch_path} #{@tmp_patch_path})
+        patch_name = File.basename(patch_path)
+        @tmp_patch_path = @path.join("#{TMP_PATCH_PATH}/#{patch_name}")
+        %x(cp #{patch_path} #{@path.join(TMP_PATCH_PATH)})
 
         @lc_file_path = @path.join(lc_file_name)
         FileUtils.touch(@lc_file_path)
