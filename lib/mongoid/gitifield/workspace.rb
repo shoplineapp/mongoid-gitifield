@@ -5,6 +5,8 @@ module Mongoid
     class Workspace
       attr_reader :name, :path, :git
 
+      TMP_PATCH_PATH = "/patch".freeze
+
       def initialize(data: '', folder_name: nil)
         @name = folder_name.presence || "gitifield-#{ DateTime.now.to_s(:nsec) }-#{ rand(10 ** 10).to_s.rjust(10,'0') }"
         @path = Pathname.new(Dir.tmpdir).join(@name)
@@ -13,11 +15,10 @@ module Mongoid
 
       def update(content, date: nil, user: nil)
         init_git_repo if @git.nil?
-
-        file = File.open @path.join('content'), 'w'
-        file.write content
-        file.fdatasync
-        file.close
+        File.open(@path.join('content'), 'w') do |file|
+          file.write content
+          file.fdatasync
+        end
         @git.tap(&:add).commit_all('update')
         Commander.exec("git commit --amend --no-edit --date=\"#{ date.strftime('%a %b %e %T %Y +0000') }\"", path: @path) if date.present?
         Commander.exec("git commit --amend --no-edit --author=\"#{ user.name } <#{ user.email }>\"", path: @path) if date.present?
@@ -71,18 +72,41 @@ module Mongoid
 
       def content
         init_git_repo if @git.nil?
-
-        file = File.open(@path.join('content'), 'r')
-        file.read.tap do
-          file.close
+        File.open(@path.join('content'), 'r') do |file|
+          file.read
         end
       end
 
-      def apply_patch(file_path)
-        @git.apply_mail(file_path.to_s)
+      # file_path be like /data/www/html/sa6.shoplinestg.com/current/aa.patch
+      # lc_file_name be like abcd.liquid
+      def apply_patch(lc_file_name, patch_path)
+        raise ApplyPatchError.new("Please make sure file exist!") unless File.exist?(patch_path)
+
+        before_apply(lc_file_name, patch_path)
+        @git.apply(@tmp_patch_path.to_s)
+        after_apply
+        
+        true
       rescue Git::GitExecuteError
-        # In case of problem, abort applying
-        Commander.exec('git am --abort', path: @path)
+        false
+      end
+
+      def before_apply(lc_file_name, patch_path)
+        file_name = File.basename(patch_path)
+        @tmp_patch_path = @path.join("#{TMP_PATCH_PATH}/#{file_name}")
+        %x(cp #{patch_path} #{@tmp_patch_path})
+
+        @lc_file_path = @path.join(lc_file_name)
+        FileUtils.touch(@lc_file_path)
+      end
+
+      def after_apply
+        File.open(@lc_file_path) do |file|
+          update(file.read)
+        end
+
+        FileUtils.rm_rf(@lc_file_path)
+        FileUtils.rm_rf(@tmp_patch_path)
       end
 
       def to_s
@@ -94,6 +118,9 @@ module Mongoid
       def clean
         @git = nil
         FileUtils.rm_rf(@path)
+      end
+
+      class ApplyPatchError < StandardError
       end
     end
   end
