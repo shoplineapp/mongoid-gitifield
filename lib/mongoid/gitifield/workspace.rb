@@ -5,25 +5,28 @@ module Mongoid
     class Workspace
       attr_reader :name, :path, :git
 
-      TMP_PATCH_PATH = "/patch".freeze
-
       def initialize(data: '', folder_name: nil)
         @name = folder_name.presence || "gitifield-#{ DateTime.now.to_s(:nsec) }-#{ rand(10 ** 10).to_s.rjust(10,'0') }"
         @path = Pathname.new(Dir.tmpdir).join(@name)
         @bundle = Bundle.new(data, workspace: self)
+        init_git_repo if @git.nil?
       end
 
       def update(content, date: nil, user: nil)
-        init_git_repo if @git.nil?
-        File.open(@path.join('content'), 'w') do |file|
-          file.write content
-          file.fdatasync
-        end
+        update_content(content)
         @git.tap(&:add).commit_all('update')
         Commander.exec("git commit --amend --no-edit --date=\"#{ date.strftime('%a %b %e %T %Y +0000') }\"", path: @path) if date.present?
         Commander.exec("git commit --amend --no-edit --author=\"#{ user.name } <#{ user.email }>\"", path: @path) if date.present?
       rescue Git::GitExecuteError
         nil
+      end
+
+      def update_content(data)
+        init_git_repo if @git.nil?
+        File.open(@path.join('content'), 'wb') do |file|
+          file.puts data
+          file.fdatasync
+        end
       end
 
       def init_git_repo(initial_commit: true)
@@ -63,7 +66,7 @@ module Mongoid
 
       def logs
         init_git_repo if @git.nil?
-        @git.log.map {|l| { id: l.sha, date: l.date } }
+        @git.log.map {|l| { id: l.sha, date: l.date, message: l.message } }
       end
 
       def id
@@ -81,32 +84,36 @@ module Mongoid
       # lc_file_name be like abcd.liquid
       def apply_patch(lc_file_name, patch_path)
         raise ApplyPatchError.new("Please make sure file exist!") unless File.exist?(patch_path)
+        init_git_repo if @git.nil?
 
         before_apply(lc_file_name, patch_path)
-        @git.apply(@tmp_patch_path.to_s)
+        @git.apply(@patch_name)
         after_apply
-        
+
         true
       rescue Git::GitExecuteError
         false
       end
 
       def before_apply(lc_file_name, patch_path)
-        patch_name = File.basename(patch_path)
-        @tmp_patch_path = @path.join("#{TMP_PATCH_PATH}/#{patch_name}")
-        %x(cp #{patch_path} #{@path.join(TMP_PATCH_PATH)})
+        @patch_name = File.basename(patch_path)
+
+        %x(cp #{patch_path} #{@path})
 
         @lc_file_path = @path.join(lc_file_name)
         FileUtils.touch(@lc_file_path)
+
+        File.open(@lc_file_path, 'wb') do |file|
+          file.puts content
+          file.fdatasync
+        end
+        Dir.chdir(@path)
       end
 
       def after_apply
-        File.open(@lc_file_path) do |file|
+        File.open(@lc_file_path, 'r') do |file|
           update(file.read)
         end
-
-        FileUtils.rm_rf(@lc_file_path)
-        FileUtils.rm_rf(@tmp_patch_path)
       end
 
       def to_s
