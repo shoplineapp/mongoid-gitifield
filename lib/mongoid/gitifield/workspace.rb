@@ -12,7 +12,7 @@ module Mongoid
         init_git_repo if @git.nil?
       end
 
-      def update(content, date: nil, user: nil)
+      def update(data, date: nil, user: nil)
         init_git_repo if @git.nil?
         File.open(@path.join('content'), 'wb') do |file|
           file.puts data
