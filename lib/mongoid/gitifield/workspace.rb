@@ -5,10 +5,11 @@ module Mongoid
     class Workspace
       attr_reader :name, :path, :git
 
-      def initialize(data: '', folder_name: nil)
+      def initialize(data: '', file_name: nil, folder_name: nil)
         @name = folder_name.presence || "gitifield-#{ DateTime.now.to_s(:nsec) }-#{ rand(10 ** 10).to_s.rjust(10,'0') }"
         @path = Pathname.new(Dir.tmpdir).join(@name)
         @bundle = Bundle.new(data, workspace: self)
+        @file_name = file_name if file_name
         init_git_repo if @git.nil?
       end
 
@@ -77,12 +78,11 @@ module Mongoid
       end
 
       # file_path be like /data/www/html/sa6.shoplinestg.com/current/aa.patch
-      # lc_file_name be like abcd.liquid
-      def apply_patch(lc_file_name, patch_path)
+      def apply_patch(patch_path)
         raise ApplyPatchError.new("Please make sure file exist!") unless File.exist?(patch_path)
         init_git_repo if @git.nil?
 
-        before_apply(lc_file_name, patch_path)
+        before_apply(patch_path)
         @git.apply(@patch_name)
         after_apply
 
@@ -91,12 +91,12 @@ module Mongoid
         false
       end
 
-      def before_apply(lc_file_name, patch_path)
+      def before_apply(patch_path)
         @patch_name = File.basename(patch_path)
 
         %x(cp #{patch_path} #{@path})
 
-        @lc_file_path = @path.join(lc_file_name)
+        @lc_file_path = @path.join(@file_name)
         FileUtils.touch(@lc_file_path)
 
         File.open(@lc_file_path, 'wb') do |file|

@@ -27,8 +27,9 @@ module Mongoid
           define_method(GITIFIELD_WORKSPACE_KEY % [field]) do
             variable_name = (GITIFIELD_WORKSPACE_CACHE_KEY % [field]).to_sym
             workspace = instance_variable_get(variable_name)
+            file_name = self.try(:name)
             if workspace.nil?
-              workspace = Workspace.new(data: self[(GITIFIELD_DATA_KEY % [field]).to_sym])
+              workspace = Workspace.new(data: self[(GITIFIELD_DATA_KEY % [field]).to_sym], file_name)
               instance_variable_set(variable_name, workspace)
             end
             workspace
