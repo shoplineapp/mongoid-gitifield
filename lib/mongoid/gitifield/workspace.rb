@@ -5,19 +5,20 @@ module Mongoid
     class Workspace
       attr_reader :name, :path, :git
 
-      def initialize(data: '', folder_name: nil)
+      def initialize(data: '', file_name: nil, folder_name: nil)
         @name = folder_name.presence || "gitifield-#{ DateTime.now.to_s(:nsec) }-#{ rand(10 ** 10).to_s.rjust(10,'0') }"
         @path = Pathname.new(Dir.tmpdir).join(@name)
         @bundle = Bundle.new(data, workspace: self)
+        @file_name = file_name if file_name
+        init_git_repo if @git.nil?
       end
 
-      def update(content, date: nil, user: nil)
+      def update(data, date: nil, user: nil)
         init_git_repo if @git.nil?
-
-        file = File.open @path.join('content'), 'w'
-        file.write content
-        file.fdatasync
-        file.close
+        File.open(@path.join('content'), 'wb') do |file|
+          file.write data
+          file.fdatasync
+        end
         @git.tap(&:add).commit_all('update')
         Commander.exec("git commit --amend --no-edit --date=\"#{ date.strftime('%a %b %e %T %Y +0000') }\"", path: @path) if date.present?
         Commander.exec("git commit --amend --no-edit --author=\"#{ user.name } <#{ user.email }>\"", path: @path) if date.present?
@@ -62,7 +63,7 @@ module Mongoid
 
       def logs
         init_git_repo if @git.nil?
-        @git.log.map {|l| { id: l.sha, date: l.date } }
+        @git.log.map {|l| { id: l.sha, date: l.date, message: l.message } }
       end
 
       def id
@@ -71,18 +72,44 @@ module Mongoid
 
       def content
         init_git_repo if @git.nil?
-
-        file = File.open(@path.join('content'), 'r')
-        file.read.tap do
-          file.close
+        File.open(@path.join('content'), 'r') do |file|
+          file.read
         end
       end
 
-      def apply_patch(file_path)
-        @git.apply_mail(file_path.to_s)
+      # file_path be like /data/www/html/sa6.shoplinestg.com/current/aa.patch
+      def apply_patch(patch_path)
+        raise ApplyPatchError.new("Please make sure file exist!") unless File.exist?(patch_path)
+        init_git_repo if @git.nil?
+
+        before_apply(patch_path)
+        @git.apply(@patch_name)
+        after_apply
+
+        true
       rescue Git::GitExecuteError
-        # In case of problem, abort applying
-        Commander.exec('git am --abort', path: @path)
+        false
+      end
+
+      def before_apply(patch_path)
+        @patch_name = File.basename(patch_path)
+
+        %x(cp #{patch_path} #{@path})
+
+        @lc_file_path = @path.join(@file_name)
+        FileUtils.touch(@lc_file_path)
+
+        File.open(@lc_file_path, 'wb') do |file|
+          file.puts content
+          file.fdatasync
+        end
+        Dir.chdir(@path)
+      end
+
+      def after_apply
+        File.open(@lc_file_path, 'r') do |file|
+          update(file.read)
+        end
       end
 
       def to_s
@@ -94,6 +121,9 @@ module Mongoid
       def clean
         @git = nil
         FileUtils.rm_rf(@path)
+      end
+
+      class ApplyPatchError < StandardError
       end
     end
   end
