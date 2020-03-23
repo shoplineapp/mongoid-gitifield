@@ -29,7 +29,7 @@ module Mongoid
             workspace = instance_variable_get(variable_name)
             file_name = self.try(:name)
             if workspace.nil?
-              workspace = Workspace.new(data: self[(GITIFIELD_DATA_KEY % [field]).to_sym], file_name)
+              workspace = Workspace.new(data: self[(GITIFIELD_DATA_KEY % [field]).to_sym], file_name: file_name)
               instance_variable_set(variable_name, workspace)
             end
             workspace
