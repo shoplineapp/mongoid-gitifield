@@ -16,7 +16,7 @@ module Mongoid
       def update(data, date: nil, user: nil)
         init_git_repo if @git.nil?
         File.open(@path.join('content'), 'wb') do |file|
-          file.puts data
+          file.write data
           file.fdatasync
         end
         @git.tap(&:add).commit_all('update')
