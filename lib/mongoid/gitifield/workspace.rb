@@ -63,7 +63,7 @@ module Mongoid
 
       def logs
         init_git_repo if @git.nil?
-        @git.log.map {|l| { id: l.sha, date: l.author_date, message: l.message } }
+        @git.log.map {|l| { id: l.sha, date: (l.author_date || l.date), message: l.message } }
       end
 
       def id
