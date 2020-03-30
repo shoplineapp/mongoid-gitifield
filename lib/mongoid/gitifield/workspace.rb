@@ -21,7 +21,7 @@ module Mongoid
         end
         @git.tap(&:add).commit_all('update')
         Commander.exec("git commit --amend --no-edit --date=\"#{ date.strftime('%a %b %e %T %Y +0000') }\"", path: @path) if date.present?
-        Commander.exec("git commit --amend --no-edit --committer=\"#{ user.name } <#{ user.email }>\"", path: @path) if user.present?
+        Commander.exec("git commit --amend --no-edit --author=\"#{ user.name } <#{ user.email }>\"", path: @path) if user.present?
       rescue Git::GitExecuteError
         nil
       end
@@ -63,7 +63,7 @@ module Mongoid
 
       def logs
         init_git_repo if @git.nil?
-        @git.log.map {|l| { id: l.sha, date: l.date, message: l.message } }
+        @git.log.map {|l| { id: l.sha, date: (l.author_date || l.date), message: l.message } }
       end
 
       def id
