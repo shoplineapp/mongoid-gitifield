@@ -26,7 +26,8 @@ module Mongoid
         nil
       end
 
-      def init_git_repo(initial_commit: true)
+      # TODO: Set initial commit as a params when workspace init
+      def init_git_repo(initial_commit: false)
         FileUtils::mkdir_p(@path)
         FileUtils.touch(@path.join('content'))
 
@@ -64,6 +65,8 @@ module Mongoid
       def logs
         init_git_repo if @git.nil?
         @git.log.map {|l| { id: l.sha, date: (l.author_date || l.date), message: l.message } }
+      rescue Git::GitExecuteError
+        []
       end
 
       def id
