@@ -13,13 +13,14 @@ module Mongoid
         init_git_repo if @git.nil?
       end
 
-      def update(data, date: nil, user: nil)
+      def update(data, date: nil, user: nil, message: nil)
         init_git_repo if @git.nil?
         File.open(@path.join('content'), 'wb') do |file|
           file.write data
           file.fdatasync
         end
-        @git.tap(&:add).commit_all('update')
+        message = message.presence || 'update'
+        @git.tap(&:add).commit_all(message)
         Commander.exec("git commit --amend --no-edit --date=\"#{ date.strftime('%a %b %e %T %Y +0000') }\"", path: @path) if date.present?
         Commander.exec("git commit --amend --no-edit --author=\"#{ user.name } <#{ user.email }>\"", path: @path) if user.present?
       rescue Git::GitExecuteError
